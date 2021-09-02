@@ -1,6 +1,35 @@
 # stm32dfu.js
 This is a proof-of-concept demo of host [USB DFU](http://wiki.openmoko.org/wiki/USB_DFU) drivers in Javascript utilizing the [WebUSB](https://wicg.github.io/webusb/) draft standard to implement USB firmware updates from the browser.
 
+
+## Used
+
+```bash
+npm install stm32dfu
+```
+
+```javascript
+// init and conn
+import stm32dfu from 'stm32dfu'
+let deviceSettings = stm32dfu.findAllStm32Device(0x0483)  //修改0x0483为对应的vendorId
+stm32dfu.getDfu(deviceSettings[0].device, deviceSettings[0])
+
+// load dfu and flash
+let dfuFile = stm32dfu.parseDfuImage([Blob])
+let flashSetting = {
+  logger : {
+    debug: (...data) => {console.log(data)},
+    info: (...data) => {console.log(data)},
+    warn: (...data) => {console.log(data)},
+    error: (...data) => {console.log(data)},
+  },
+  handler: (done, total) => {
+    console.log(`${done} / ${total}`)
+  }
+}
+stm32dfu.flash(deviceSettings[0], dfuFile, flashSetting).then()
+```
+
 ## Demos
 ### stm32dfu
 https://kischang.github.io/stm32dfu/example/

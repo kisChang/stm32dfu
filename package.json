@@ -1,6 +1,6 @@
 {
   "name": "stm32dfu",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "KisChang",
   "license": "MIT",
   "description": "STM32 DFU DfuSeCommand js",
@@ -9,6 +9,10 @@
     "dev": "webpack --config webpack.config.js --mode=development -w",
     "build": "webpack --config webpack.config.js --mode=production",
     "lint": "eslint ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kisChang/stm32dfu.git"
   },
   "keywords": [
     "STM32",
@@ -29,5 +33,7 @@
     "uglifyjs-webpack-plugin": "^2.2.0",
     "webpack": "^4.46.0",
     "webpack-cli": "^4.8.0"
+  },
+  "dependencies": {
   }
 }
