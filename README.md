@@ -3,7 +3,7 @@ This is a proof-of-concept demo of host [USB DFU](http://wiki.openmoko.org/wiki/
 
 ## Demos
 ### stm32dfu
-https://ksichang.github.io/stm32dfu/example/
+https://kischang.github.io/stm32dfu/example/
 
 ### dfu-util
 A demo re-implementing dfu-util functionality in the browser:
