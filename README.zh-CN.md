@@ -5,6 +5,11 @@
 
 基于: [webdfu](https://github.com/devanlai/webdfu)
 
+[![stm32dfu Logo](https://nodei.co/npm/stm32dfu.png)](https://www.npmjs.com/package/stm32dfu)
+
+[![NPM Version][npm-image]][npm-url]
+[![NPM Downloads][downloads-image]][downloads-url]
+
 ## 快速使用
 
 ```bash
@@ -36,7 +41,7 @@ stm32dfu.flash(deviceSettings[0], dfuFile, flashSetting).then()
 ## TODO
 
 - [ ] Github Pages 演示页面完善
-- [ ] 使用TypeScript重写
+- [x] 使用TypeScript重写
 
 ## Demos
 ### stm32dfu

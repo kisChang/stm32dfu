@@ -23,9 +23,11 @@
 */
 'use strict'
 
-import DFU from './DFU'
+import {DFU, Device, DeviceSettings} from './DFU'
+// @ts-ignore
+import {USBDevice, USBConfiguration, USBInterface, USBAlternateInterface} from 'w3c-web-usb'
 
-class DFUse extends DFU {
+export class DFUse extends DFU {
   constructor() {
     super()
   }
@@ -46,7 +48,7 @@ class DFUse extends DFU {
     return 0x92
   }
 
-  static parseMemoryDescriptor(desc) {
+  static parseMemoryDescriptor(desc: string) {
     const nameEndIndex = desc.indexOf('/')
     if (!desc.startsWith('@') || nameEndIndex === -1) {
       throw new Error(`Not a DfuSe memory descriptor: "${desc}"`)
@@ -57,7 +59,7 @@ class DFUse extends DFU {
 
     let segments = []
 
-    const sectorMultipliers = {
+    const sectorMultipliers: any = {
       ' ': 1,
       'B': 1,
       'K': 1024,
@@ -71,7 +73,7 @@ class DFUse extends DFU {
       let startAddress = parseInt(contiguousSegmentMatch[1], 16)
       let segmentMatch
       while ((segmentMatch = segmentRegex.exec(contiguousSegmentMatch[0]))) {
-        let segment = {}
+        let segment: any = {}
         let sectorCount = parseInt(segmentMatch[1], 10)
         let sectorSize = parseInt(segmentMatch[2]) * sectorMultipliers[segmentMatch[3]]
         let properties = segmentMatch[4].charCodeAt(0) - 'a'.charCodeAt(0) + 1
@@ -91,11 +93,21 @@ class DFUse extends DFU {
   }
 }
 
-DFUse.Device = class extends DFU.Device {
-  constructor(device, settings) {
+export class DFUseDevice extends Device {
+  private _startAddress: number;
+  private memoryInfo: any;
+
+  constructor(device:USBDevice, settings: DeviceSettings) {
     super(device, settings)
     this.memoryInfo = null
-    this.startAddress = NaN
+    this._startAddress = NaN
+  }
+
+  set startAddress(value: number) {
+    this._startAddress = value;
+  }
+  get startAddress(): number {
+    return this._startAddress;
   }
 
   async loadMemoryInfo() {
@@ -109,13 +121,13 @@ DFUse.Device = class extends DFU.Device {
     this.memoryInfo = DFUse.parseMemoryDescriptor(name)
   }
 
-  async dfuseCommand(command, param, len) {
+  async dfuseCommand(command: number, param: number, len: number) {
     if (typeof param === 'undefined' && typeof len === 'undefined') {
       param = 0x00
       len = 1
     }
 
-    const commandNames = {
+    const commandNames: any = {
       0x00: 'GET_COMMANDS',
       0x21: 'SET_ADDRESS',
       0x41: 'ERASE_SECTOR',
@@ -145,7 +157,7 @@ DFUse.Device = class extends DFU.Device {
     }
   }
 
-  getSegment(addr) {
+  getSegment(addr: number) {
     if (!this.memoryInfo || !this.memoryInfo.segments) {
       throw new Error('No memory map information available')
     }
@@ -159,7 +171,7 @@ DFUse.Device = class extends DFU.Device {
     return null
   }
 
-  getSectorStart(addr, segment) {
+  getSectorStart(addr: number, segment: any) {
     if (typeof segment === 'undefined') {
       segment = this.getSegment(addr)
     }
@@ -172,7 +184,7 @@ DFUse.Device = class extends DFU.Device {
     return segment.start + sectorIndex * segment.sectorSize
   }
 
-  getSectorEnd(addr, segment) {
+  getSectorEnd(addr: number, segment: any | undefined) {
     if (typeof segment === 'undefined') {
       segment = this.getSegment(addr)
     }
@@ -199,7 +211,7 @@ DFUse.Device = class extends DFU.Device {
     return null
   }
 
-  getMaxReadSize(startAddr) {
+  getMaxReadSize(startAddr: number) {
     if (!this.memoryInfo || !this.memoryInfo.segments) {
       throw new Error('No memory map information available')
     }
@@ -226,10 +238,10 @@ DFUse.Device = class extends DFU.Device {
     return numBytes
   };
 
-  async erase(startAddr, length) {
+  async erase(startAddr: number, length: number) {
     let segment = this.getSegment(startAddr)
     let addr = this.getSectorStart(startAddr, segment)
-    const endAddr = this.getSectorEnd(startAddr + length - 1)
+    const endAddr = this.getSectorEnd(startAddr + length - 1, undefined)
 
     let bytesErased = 0
     const bytesToErase = endAddr - addr
@@ -258,7 +270,7 @@ DFUse.Device = class extends DFU.Device {
     }
   };
 
-  async do_download(xfer_size, data, manifestationTolerant) {
+  async do_download(xfer_size: number, data: BufferSource, manifestationTolerant: any) {
     if (!this.memoryInfo || !this.memoryInfo.segments) {
       throw new Error('No memory map available')
     }
@@ -268,7 +280,7 @@ DFUse.Device = class extends DFU.Device {
     let bytes_sent = 0
     let expected_size = data.byteLength
 
-    let startAddress = this.startAddress
+    let startAddress = this._startAddress
     if (isNaN(startAddress)) {
       startAddress = this.memoryInfo.segments[0].start
       this.logWarning('Using inferred start address 0x' + startAddress.toString(16))
@@ -294,6 +306,7 @@ DFUse.Device = class extends DFU.Device {
         this.logDebug(`Set address to 0x${address.toString(16)}`)
 
         //2. Write memory
+        // @ts-ignore
         bytes_written = await this.download(data.slice(bytes_sent, bytes_sent + chunk_size), 2)
         this.logDebug('Sent ' + bytes_written + ' bytes')
         dfu_status = await this.poll_until_idle([DFU.dfuDNLOAD_IDLE, DFU.dfuIDLE])
@@ -319,11 +332,11 @@ DFUse.Device = class extends DFU.Device {
     }
   }
 
-  async manifestationToNew(startAddress) {
+  async manifestationToNew(startAddress: number) {
     this.logInfo('Manifesting new firmware')
     try {
       await this.dfuseCommand(DFUse.SET_ADDRESS, startAddress, 4)
-      await this.download(new ArrayBuffer(), 2)
+      await this.download(new ArrayBuffer(0), 2)
     } catch (error) {
       throw new Error('Error during DfuSe manifestation: ' + error)
     }
@@ -335,8 +348,8 @@ DFUse.Device = class extends DFU.Device {
     }
   }
 
-  async do_upload(xfer_size, max_size = Infinity) {
-    let startAddress = this.startAddress
+  async doUpload(xfer_size: number, max_size = Infinity) {
+    let startAddress = this._startAddress
     if (isNaN(startAddress)) {
       startAddress = this.memoryInfo.segments[0].start
       this.logWarning('Using inferred start address 0x' + startAddress.toString(16))
@@ -357,14 +370,14 @@ DFUse.Device = class extends DFU.Device {
     return await this.do_upload(xfer_size, max_size, 2)
   }
 
-  async do_upload(xfer_size, max_size, first_block) {
+  async do_upload(xfer_size: number, max_size: number, first_block: number) {
     let transaction = first_block
     let blocks = []
     let bytes_read = 0
 
     this.logInfo('Copying data from DFU device to browser')
     // Initialize progress to 0
-    this.logProgress(0)
+    this.logProgress(0, 0)
 
     let result
     let bytes_to_read
@@ -379,7 +392,7 @@ DFUse.Device = class extends DFU.Device {
       if (Number.isFinite(max_size)) {
         this.logProgress(bytes_read, max_size)
       } else {
-        this.logProgress(bytes_read)
+        this.logProgress(bytes_read, undefined)
       }
     } while ((bytes_read < max_size) && (result.byteLength === bytes_to_read))
 
@@ -396,7 +409,7 @@ DFUse.Device = class extends DFU.Device {
     // Attempt to read the DFU functional descriptor
     // TODO: read the selected configuration's descriptor
     return this.readConfigurationDescriptor(0).then(
-      data => {
+      (data: any) => {
         let configDesc = DFU.parseConfigurationDescriptor(data)
         let funcDesc = null
         let configValue = this.settings.configuration.configurationValue
@@ -422,8 +435,6 @@ DFUse.Device = class extends DFU.Device {
         } else {
           return {}
         }
-      },
-      error => {
       }
     )
   }

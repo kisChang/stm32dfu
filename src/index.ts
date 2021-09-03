@@ -21,79 +21,87 @@
 * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 * SOFTWARE.
 */
-import DFU from './DFU'
-import DFUse from './DFUse'
+import DFU, {DeviceSettings, Logger, ProgressHandler} from './DFU'
+import DFUse, {DFUseDevice} from './DFUse'
+import {Buffer} from "buffer";
 
 class DfuFile {
-  prefix;
-  suffix;
-  imagesSection;
+  public prefix: DFUPrefix | undefined;
+  public suffix: DFUSuffix | undefined;
+  public imagesSection: Array<DfuImage> = new Array<DfuImage>();
 
   constructor() {
   }
 }
 
 class DFUPrefix {
-  szSignature;
-  bVersion;
-  DFUImageSize;
-  bTargets;
+  szSignature: string | undefined;
+  bVersion: number | undefined;
+  DFUImageSize: number | undefined;
+  bTargets: number | undefined;
 
   constructor() {
   }
 }
 
 class DfuImage {
-  szSignature;
-  bAlternateSetting;
-  bTargetNamed;
-  szTargetName;
-  dwTargetSize;
-  dwNbElements;
-  imageElements;
+  szSignature: string | undefined;
+  bAlternateSetting: number | undefined;
+  bTargetNamed: number | undefined;
+  szTargetName: string | undefined;
+  dwTargetSize: number | undefined;
+  dwNbElements: number | undefined;
+  imageElements: Array<ImageElement> = new Array<ImageElement>();
 
   constructor() {
   }
 }
 
 class ImageElement {
-  dwElementAddress;
-  dwElementSize;
-  data;
+  public dwElementAddress: number = 0x08000000;
+  public dwElementSize: number | undefined;
+  public data: Buffer | undefined;
 
   constructor() {
   }
 }
 
 class DFUSuffix {
-  bcdDeviceLo;
-  bcdDeviceHi;
-  idProductLo;
-  idProductHi;
-  idVendorLo;
-  idVendorHi;
-  bcdDFULo;
-  bcdDFUHi;
-  ucDfuSignature;
-  bLength;
-  dwCRC;
+  public bcdDeviceLo: number | undefined;
+  public bcdDeviceHi: number | undefined;
+  public idProductLo: number | undefined;
+  public idProductHi: number | undefined;
+  public idVendorLo: number | undefined;
+  public idVendorHi: number | undefined;
+  public bcdDFULo: number | undefined;
+  public bcdDFUHi: number | undefined;
+  public ucDfuSignature: string | undefined;
+  public bLength: number | undefined;
+  public dwCRC: Buffer | undefined;
 
   constructor() {
   }
 }
 
+export class FlashSetting {
+  public logger: Logger = new Logger();
+  public handler: ProgressHandler = (done, total) => {
+    console.log(done + '/' + total)
+  };
+}
+
+const dfuMap: any = {};
+
 export default {
   DFU: DFU,
   DFUse: DFUse,
-  Device: DFUse.Device,
-
-  dfuMap: {},
+  Device: DFUseDevice,
 
   /**
    * 解析DFU文件
    * @param firmwareFile
    */
-  parseDfuImage(firmwareFile) {
+  parseDfuImage(firmwareFile: Buffer): DfuFile {
     let dfuFile = new DfuFile()
     //- DFU PREFIX
     dfuFile.prefix = new DFUPrefix()
@@ -149,12 +157,15 @@ export default {
     return dfuFile;
   },
 
-  getDfu(device, settings) {
-    if (this.dfuMap[device.serialNumber]) {
-      return this.dfuMap[device.serialNumber];
+  getDfu(device: USBDevice, settings: DeviceSettings): DFUseDevice {
+    // @ts-ignore
+    if (dfuMap[device.serialNumber]) {
+      // @ts-ignore
+      return dfuMap[device.serialNumber];
     } else {
-      let dfu = new DFUse.Device(device, settings)
-      this.dfuMap[device.serialNumber] = dfu;
+      let dfu = new DFUseDevice(device, settings)
+      // @ts-ignore
+      dfuMap[device.serialNumber] = dfu;
       return dfu;
     }
   },
@@ -164,7 +175,7 @@ export default {
    * @param deviceSetting
    * @param dfuFile
    */
-  async flash(deviceSetting, dfuFile, setting) {
+  async flash(deviceSetting: DeviceSettings, dfuFile: DfuFile, setting: FlashSetting) {
     let dfu = this.getDfu(deviceSetting.device, deviceSetting);
 
     if (setting && setting.logger) {
@@ -199,6 +210,7 @@ export default {
     for (let onceImg of dfuFile.imagesSection[0].imageElements) {
       // 指定起始位置
       dfu.startAddress = onceImg.dwElementAddress;
+      // @ts-ignore
       await dfu.do_download(transferSize, onceImg.data, false)
     }
     if (manifestationTolerant) {
@@ -208,10 +220,11 @@ export default {
 
     if (!manifestationTolerant) {
       dfu.waitDisconnected(5000).then(
-        dev => {
+        // @ts-ignore
+        (dev: any) => {
           dfu.logInfo('you can close');
         },
-        error => {
+        (error: any) => {
           dfu.logError('disconn error ', error)
           // It didn't reset and disconnect for some reason...
           dfu.logError('Device unexpectedly tolerated manifestation.')
@@ -222,16 +235,18 @@ export default {
     return true;
   },
 
-  async findAllStm32Device (vendorId) {
+  async findAllStm32Device (vendorId: number) {
     let deviceList = await navigator.usb.getDevices()
     if (deviceList.length <= 0) {
-      deviceList = await navigator.usb.requestDevice({filters: [{vendorId: vendorId}]});
+      let once: USBDevice = await navigator.usb.requestDevice({filters: [{vendorId: vendorId}]});
+      deviceList = new Array<USBDevice>();
+      deviceList.push(once)
     }
     return this.findAllDeviceDfuInterfaces(deviceList)
   },
 
-  async findAllDeviceDfuInterfaces(deviceList) {
-    let rv = []
+  async findAllDeviceDfuInterfaces(deviceList: Array<USBDevice>) {
+    let rv: Array<DeviceSettings> = []
     for (let device of deviceList) {
       let tmp = DFU.findDeviceDfuInterfaces(device)
       let dfu = this.getDfu(device, tmp[0]);

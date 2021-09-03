@@ -1,32 +1,34 @@
 /**
-* MIT License
-*
-* Copyright (c) 2021 KisChang
-*
-* Permission is hereby granted, free of charge, to any person obtaining a copy
-* of this software and associated documentation files (the "Software"), to deal
-* in the Software without restriction, including without limitation the rights
-* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the Software is
-* furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in all
-* copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * MIT License
+ *
+ * Copyright (c) 2021 KisChang
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 'use strict'
+// @ts-ignore
+import {USBDevice, USBConfiguration, USBInterface, USBAlternateInterface} from 'w3c-web-usb'
 
 /*
  * Static DFU class.
  */
-class DFU {
+export class DFU {
   constructor() {
   }
 
@@ -194,22 +196,22 @@ class DFU {
     return 0x80
   }
 
-  static findDeviceDfuInterfaces(device) {
-    let interfaces = []
+  static findDeviceDfuInterfaces(device: USBDevice): DeviceSettings[] {
+    let interfaces = new Array<DeviceSettings>();
     for (let conf of device.configurations) {
       for (let intf of conf.interfaces) {
         for (let alt of intf.alternates) {
           if (alt.interfaceClass === 0xFE &&
             alt.interfaceSubclass === 0x01 &&
             (alt.interfaceProtocol === 0x01 || alt.interfaceProtocol === 0x02)) {
-            let settings = {
-              'configuration': conf,
-              'interface': intf,
-              'alternate': alt,
-              'name': alt.interfaceName,
-              'device': device,
-            }
-            interfaces.push(settings)
+            let set = new DeviceSettings()
+            set.configuration = conf
+            set.interface = intf
+            set.alternate = alt
+            set.name = alt.interfaceName
+            set.device = device
+
+            interfaces.push(set)
           }
         }
       }
@@ -217,7 +219,7 @@ class DFU {
     return interfaces
   }
 
-  static parseDeviceDescriptor(data) {
+  static parseDeviceDescriptor(data: DataView) {
     return {
       bLength: data.getUint8(0),
       bDescriptorType: data.getUint8(1),
@@ -236,7 +238,7 @@ class DFU {
     }
   }
 
-  static parseConfigurationDescriptor(data) {
+  static parseConfigurationDescriptor(data: DataView) {
     let descriptorData = new DataView(data.buffer.slice(9))
     let descriptors = DFU.parseSubDescriptors(descriptorData)
     return {
@@ -252,7 +254,7 @@ class DFU {
     }
   }
 
-  static parseInterfaceDescriptor(data) {
+  static parseInterfaceDescriptor(data: DataView): any {
     return {
       bLength: data.getUint8(0),
       bDescriptorType: data.getUint8(1),
@@ -267,7 +269,7 @@ class DFU {
     }
   }
 
-  static parseFunctionalDescriptor(data) {
+  static parseFunctionalDescriptor(data: DataView) {
     return {
       bLength: data.getUint8(0),
       bDescriptorType: data.getUint8(1),
@@ -278,7 +280,7 @@ class DFU {
     }
   }
 
-  static parseSubDescriptors(descriptorData) {
+  static parseSubDescriptors(descriptorData: any) {
     const DT_INTERFACE = 4
     // const DT_ENDPOINT = 5;
     const DT_DFU_FUNCTIONAL = 0x21
@@ -323,51 +325,93 @@ class DFU {
   }
 }
 
+export class DeviceSettings {
+  public configuration: USBConfiguration;
+  public interface: USBInterface;
+  public alternate: USBAlternateInterface;
+  public name: string = '';
+  public device: USBDevice;
+}
+
+export class Logger {
+  debug(...data: any) {
+    console.debug(data)
+  }
+
+  info(...data: any) {
+    console.log(data)
+  }
+
+  log(...data: any) {
+    this.info(data);
+  }
+
+  warn(...data: any) {
+    console.warn(data)
+  }
+
+  error(...data: any) {
+    console.error(data)
+  }
+}
+
+export interface ProgressHandler {
+  (done: number, total: number | undefined): void
+}
+
 /**
  * Represents a DFU-enabled connected device.
  */
-DFU.Device = class {
-  constructor(device, settings) {
+export class Device {
+  protected device_: USBDevice;
+  protected settings: DeviceSettings;
+  protected intfNumber: number;
+
+  protected _log: Logger;
+  protected _progressHandler: ProgressHandler;
+
+  constructor(device: USBDevice, settings: DeviceSettings) {
     this.device_ = device
     this.settings = settings
-    this.intfNumber = settings['interface'].interfaceNumber
-    this.dnload = this.download
-    this.clrStatus = this.clearStatus
+    this.intfNumber = settings.interface.interfaceNumber
 
-    this._log = console
-    this._progressHandler = undefined;
+    this._log = new Logger();
+    this._progressHandler = (done, total) => {
+      console.log(done + '/' + total)
+    };
   }
 
-  set log(value) {
+  set log(value: Logger) {
     this._log = value
   }
 
-  set progressHandler(value) {
+  set progressHandler(value: ProgressHandler) {
     this._progressHandler = value
   }
 
-  logDebug(...msg) {
+  logDebug(...msg: any) {
     this._log.debug(msg)
   }
 
-  logInfo(...msg) {
+  logInfo(...msg: any) {
     this._log.info(msg)
   }
 
-  logWarning(...msg) {
+  logWarning(...msg: any) {
     this._log.warn(msg)
   }
 
-  logError(...msg) {
+  logError(...msg: any) {
     this._log.error(msg)
   }
 
-  logProgress(done, total) {
+  logProgress(done: number, total: number | undefined) {
     if (this._progressHandler) {
       this._progressHandler(done, total ? total : done);
     }
   }
 
+  // @ts-ignore
   async open() {
     if (this.device_.opened) {
       return
@@ -412,7 +456,7 @@ DFU.Device = class {
       'value': wValue,
       'index': 0
     }, 18).then(
-      result => {
+      (result: any) => {
         if (result.status === 'ok') {
           return Promise.resolve(result.data)
         } else {
@@ -422,7 +466,7 @@ DFU.Device = class {
     )
   }
 
-  async readStringDescriptor(index, langID) {
+  async readStringDescriptor(index: number, langID: number | undefined) {
     if (typeof langID === 'undefined') {
       langID = 0
     }
@@ -468,8 +512,8 @@ DFU.Device = class {
   async readInterfaceNames() {
     const DT_INTERFACE = 4
 
-    let configs = {}
-    let allStringIndices = new Set()
+    let configs: any = {}
+    let allStringIndices: any = new Set()
     for (let configIndex = 0; configIndex < this.device_.configurations.length; configIndex++) {
       const rawConfig = await this.readConfigurationDescriptor(configIndex)
       let configDesc = DFU.parseConfigurationDescriptor(rawConfig)
@@ -490,7 +534,7 @@ DFU.Device = class {
       }
     }
 
-    let strings = {}
+    let strings: any = {}
     // Retrieve interface name strings
     for (let index of allStringIndices) {
       try {
@@ -513,7 +557,7 @@ DFU.Device = class {
     return configs
   }
 
-  readConfigurationDescriptor(index) {
+  readConfigurationDescriptor(index: number) {
     const GET_DESCRIPTOR = 0x06
     const DT_CONFIGURATION = 0x02
     const wValue = ((DT_CONFIGURATION << 8) | index)
@@ -525,9 +569,10 @@ DFU.Device = class {
       'value': wValue,
       'index': 0
     }, 4).then(
-      result => {
+      (result: USBInTransferResult) => {
         if (result.status === 'ok') {
           // Read out length of the configuration descriptor
+          // @ts-ignore
           let wLength = result.data.getUint16(2, true)
           return this.device_.controlTransferIn({
             'requestType': 'standard',
@@ -541,7 +586,7 @@ DFU.Device = class {
         }
       }
     ).then(
-      result => {
+      (result: USBInTransferResult) => {
         if (result.status === 'ok') {
           return Promise.resolve(result.data)
         } else {
@@ -551,7 +596,7 @@ DFU.Device = class {
     )
   }
 
-  requestOut(bRequest, data, wValue = 0) {
+  requestOut(bRequest: number, data?: BufferSource, wValue = 0) {
     return this.device_.controlTransferOut({
       'requestType': 'class',
       'recipient': 'interface',
@@ -559,21 +604,21 @@ DFU.Device = class {
       'value': wValue,
       'index': this.intfNumber
     }, data).then(
-      result => {
+      (result: USBOutTransferResult) => {
         if (result.status === 'ok') {
           return Promise.resolve(result.bytesWritten)
         } else {
           return Promise.reject(result.status)
         }
       },
-      error => {
+      (error: any) => {
         console.error(error)
         return Promise.reject('ControlTransferOut failed: ' + error)
       }
     )
   }
 
-  requestIn(bRequest, wLength, wValue = 0) {
+  requestIn(bRequest: number, wLength: number, wValue: number = 0) {
     return this.device_.controlTransferIn({
       'requestType': 'class',
       'recipient': 'interface',
@@ -581,14 +626,14 @@ DFU.Device = class {
       'value': wValue,
       'index': this.intfNumber
     }, wLength).then(
-      result => {
+      (result: USBInTransferResult) => {
         if (result.status === 'ok') {
           return Promise.resolve(result.data)
         } else {
           return Promise.reject(result.status)
         }
       },
-      error => {
+      (error: any) => {
         console.error(error)
         return Promise.reject('ControlTransferIn failed: ' + error)
       }
@@ -599,29 +644,22 @@ DFU.Device = class {
     return this.requestOut(DFU.DETACH, undefined, 1000)
   }
 
-  async waitDisconnected(timeout) {
+  async waitDisconnected(timeout: number) {
     let device = this
     let usbDevice = this.device_
     return new Promise(function (resolve, reject) {
-      let timeoutID
+      let timeoutID = -1
       if (timeout > 0) {
-        /*
-        function onTimeout() {
-            navigator.usb.removeEventListener("disconnect", onDisconnect);
-            if (device.disconnected !== true) {
-                reject("Disconnect timeout expired");
-            }
-        }
-        */
+        // @ts-ignore
         timeoutID = setTimeout(reject, timeout)
       }
 
-      function onDisconnect(event) {
+      function onDisconnect(event: any) {
         if (event.device === usbDevice) {
           if (timeout > 0) {
             clearTimeout(timeoutID)
           }
-          device.disconnected = true
+          // device.disconnected = true
           navigator.usb.removeEventListener('disconnect', onDisconnect)
           event.stopPropagation()
           resolve(device)
@@ -632,19 +670,18 @@ DFU.Device = class {
     })
   }
 
-  async async_sleep(duration_ms) {
-    return new Promise((resolve, reject) => {
-      //duration_ms += 200
+  async async_sleep(duration_ms: number) {
+    return new Promise((resolve) => {
       this.logDebug('Sleeping for ' + duration_ms + 'ms')
       setTimeout(resolve, duration_ms)
     })
   }
 
-  download(data, wValue) {
+  download(data: BufferSource, wValue: number) {
     return this.requestOut(DFU.DNLOAD, data, wValue)
   }
 
-  upload(length, blockNum) {
+  upload(length: number, blockNum: number) {
     return this.requestIn(DFU.UPLOAD, length, blockNum)
   }
 
@@ -654,21 +691,20 @@ DFU.Device = class {
 
   getStatus() {
     return this.requestIn(DFU.GETSTATUS, 6, 0).then(
-      data =>
+      (data: DataView) =>
         Promise.resolve({
           'status': data.getUint8(0),
           'pollTimeout': data.getUint32(1, true) & 0xFFFFFF,
           'state': data.getUint8(4)
         }),
-      error =>
-        Promise.reject('DFU GETSTATUS failed: ' + error)
+      (error: any) => Promise.reject('DFU GETSTATUS failed: ' + error)
     )
   }
 
   getState() {
     return this.requestIn(DFU.GETSTATE, 1).then(
-      data => Promise.resolve(data.getUint8(0)),
-      error => Promise.reject('DFU GETSTATE failed: ' + error)
+      (data: DataView) => Promise.resolve(data.getUint8(0)),
+      (error: any) => Promise.reject('DFU GETSTATE failed: ' + error)
     )
   }
 
@@ -688,7 +724,7 @@ DFU.Device = class {
     }
   }
 
-  async poll_until(state_predicate) {
+  async poll_until(state_predicate: (state: number) => boolean) {
     let dfu_status = await this.getStatus()
 
     while (!state_predicate(dfu_status.state) && dfu_status.state !== DFU.dfuERROR) {
@@ -699,8 +735,8 @@ DFU.Device = class {
     return dfu_status
   }
 
-  poll_until_idle(idle_state) {
-    return this.poll_until(state => {
+  poll_until_idle(idle_state: any) {
+    return this.poll_until((state: number) => {
       if (idle_state.length > 0) {
         return idle_state.indexOf(state) >= 0
       } else {

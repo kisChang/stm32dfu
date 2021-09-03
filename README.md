@@ -3,6 +3,11 @@ A library of host [USB DFU](http://wiki.openmoko.org/wiki/USB_DFU) drivers in Ja
 
 Base: <a href="https://github.com/devanlai/webdfu">webdfu</a>
 
+[![stm32dfu Logo](https://nodei.co/npm/stm32dfu.png)](https://www.npmjs.com/package/stm32dfu)
+
+[![NPM Version][npm-image]][npm-url]
+[![NPM Downloads][downloads-image]][downloads-url]
+
 ## Used
 
 ```bash
@@ -34,7 +39,7 @@ stm32dfu.flash(deviceSettings[0], dfuFile, flashSetting).then()
 ## TODO
 
 - [ ] demo
-- [ ] Rewrite using TypeScript
+- [x] Rewrite using TypeScript
 
 ## Demos
 ### stm32dfu
